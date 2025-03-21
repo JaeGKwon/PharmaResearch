@@ -16,7 +16,7 @@ except ImportError:
     subprocess.run(["pip", "install", "--upgrade", "langchain-openai"], check=True)
     from langchain_openai import ChatOpenAI  # Retry import after installation
 
-st.success("✅ ChatOpenAI successfully imported!")
+#st.success("✅ ChatOpenAI successfully imported!")
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
