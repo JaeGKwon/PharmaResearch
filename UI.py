@@ -8,15 +8,16 @@ import streamlit as st
 import subprocess
 
 # Ensure required packages are installed in Streamlit environment
+# Ensure the correct LangChain version is installed
 try:
-    #from langchain_openai import ChatOpenAI  # Attempt to import
-    from langchain.chat_models import ChatOpenAI  # For older LangChain versions
+    from langchain_openai import ChatOpenAI  # Correct import for 2024+
 except ImportError:
-    st.warning("Installing missing dependencies...")
+    st.warning("🔄 Installing missing dependencies...")
     subprocess.run(["pip", "install", "--upgrade", "langchain-openai"], check=True)
-    #from langchain_openai import ChatOpenAI  # Import again after installation
-    from langchain.chat_models import ChatOpenAI  # For older LangChain versions
-    
+    from langchain_openai import ChatOpenAI  # Retry import after installation
+
+st.success("✅ ChatOpenAI successfully imported!")
+
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
