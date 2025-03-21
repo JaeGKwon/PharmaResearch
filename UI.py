@@ -9,12 +9,12 @@ import subprocess
 
 # Ensure required packages are installed in Streamlit environment
 # Ensure the correct LangChain version is installed
-try:
-    from langchain_openai import ChatOpenAI  # Correct import for 2024+
-except ImportError:
-    st.warning("🔄 Installing missing dependencies...")
-    subprocess.run(["pip", "install", "--upgrade", "langchain-openai"], check=True)
-    from langchain_openai import ChatOpenAI  # Retry import after installation
+#try:
+#    from langchain_openai import ChatOpenAI  # Correct import for 2024+
+#except ImportError:
+#    st.warning("🔄 Installing missing dependencies...")
+#    subprocess.run(["pip", "install", "--upgrade", "langchain-openai"], check=True)
+#    from langchain_openai import ChatOpenAI  # Retry import after installation
 
 #st.success("✅ ChatOpenAI successfully imported!")
 
@@ -56,6 +56,11 @@ else:
     pre_defined_prompt = ""
 
 custom_query = st.text_area("Custom Query (Optional)", pre_defined_prompt, height=150)
+
+# Load the Button **Immediately**
+analyze_button = st.button("Analyze")  # Button appears first
+
+
 
 import requests
 import time
