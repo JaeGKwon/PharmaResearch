@@ -3,7 +3,18 @@ import requests
 import logging
 import time
 from datetime import datetime
+import os
+import streamlit as st
+import subprocess
 
+# Ensure required packages are installed in Streamlit environment
+try:
+    from langchain_openai import ChatOpenAI  # Attempt to import
+except ImportError:
+    st.warning("Installing missing dependencies...")
+    subprocess.run(["pip", "install", "--upgrade", "langchain-openai"], check=True)
+    from langchain_openai import ChatOpenAI  # Import again after installation
+    
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
