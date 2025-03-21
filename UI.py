@@ -606,42 +606,6 @@ def recursive_query(query, max_subqueries=10, source_config=None):
 
     return final_result
 
-# Example usage
-if __name__ == "__main__":
-    logger.info("\n" + "="*80)
-    logger.info("="*30 + " STARTING NEW QUERY EXECUTION " + "="*30)
-    logger.info("="*80 + "\n")
-
-    main_query = "Provide a comprehensive evaluation of recent FDA inspection history, regulatory compliance, and sustainability practices for Thermo Fisher Scientific."
-    max_subqueries = 10  # Set your limit here
-
-    # Configure which sources to use (all enabled by default)
-    source_config = {
-        "use_gpt4o": True,         # Set to False to disable GPT-4o
-        "use_perplexity": True,    # Set to False to disable Perplexity
-        "use_google_search": True  # Set to False to disable Google Custom Search
-    }
-
-    try:
-        # To use all sources (default)
-        # final_summary = recursive_query(main_query, max_subqueries)
-
-        # To use selected sources
-        final_summary = recursive_query(main_query, max_subqueries, source_config)
-
-        # Example: Use only GPT-4o
-        # final_summary = recursive_query(main_query, max_subqueries, {
-        #     "use_gpt4o": True,
-        #     "use_perplexity": False,
-        #     "use_google_search": False
-        # })
-
-        print("\n\nFINAL RESULT:")
-        print(final_summary)
-    except Exception as e:
-        logger.error(f"Fatal error in query execution: {str(e)}")
-        print(f"Error: {str(e)}")
-
 # Define function to process the query using your existing Python code
 def process_query(query):
     # Replace this with your actual code logic
@@ -661,17 +625,38 @@ def process_query(query):
 
     return response
 
-# Submit button
+
 if analyze_button:
     if not company or not selected_subject:
         st.error("Please select a company and a research subject.")
     else:
-        final_query = custom_query  # This includes the auto-populated or modified query
+        final_query = custom_query
         st.info(f"Submitting query:\n\n{final_query}")
 
-        # Call the function to process the query
-        response = process_query(final_query)
+        # ✅ Add real-time status updates
+        with st.status("Processing your query...", expanded=True) as status:
+            st.write("🛠️ Step 1: Validating query...")
+            time.sleep(1)  # Simulating validation
+
+            st.write("🔍 Step 2: Fetching data from GPT-4o...")
+            gpt_result = query_all_sources(final_query, "GPT-4o Processing", {"use_gpt4o": True})
+
+            st.write("🌐 Step 3: Fetching data from Google Search...")
+            google_result = query_all_sources(final_query, "Google Search Processing", {"use_google_search": True})
+
+            st.write("🤖 Step 4: Fetching data from Perplexity AI...")
+            perplexity_result = query_perplexity(final_query, "Perplexity AI Processing")
+
+            st.write("🛠️ Step 5: Cross-validating responses...")
+            combined_result = cross_validate_and_combine(final_query, {
+                "GPT-4o": gpt_result.get("GPT-4o", "No data"),
+                "Google Search": google_result.get("Google Custom Search", "No data"),
+                "Perplexity AI": perplexity_result
+            })
+
+            # ✅ Mark as complete
+            status.update(label="✅ Query Processed Successfully!", state="complete")
 
         # Display the result
         st.success("Query processed successfully!")
-        st.write(response)
+        st.write(combined_result)
