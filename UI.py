@@ -81,6 +81,7 @@ import requests
 import time
 import logging
 from datetime import datetime
+from langchain_openai import ChatOpenAI
 
 openai_api_key = st.secrets["OPENAI_API_KEY"]
 google_api_key = st.secrets["GOOGLE_API_KEY"]
