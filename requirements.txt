@@ -4,3 +4,5 @@ langchain-community
 langchain
 langchain-openai
 openai
+google-api-python-client
+google-search-results
