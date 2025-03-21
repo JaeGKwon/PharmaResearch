@@ -57,25 +57,6 @@ else:
 
 custom_query = st.text_area("Custom Query (Optional)", pre_defined_prompt, height=150)
 
-# Define function to process the query using your existing Python code
-def process_query(query):
-    # Replace this with your actual code logic
-    st.info(f"Processing query:\n\n{query}")
-
-    # Simulating API request (Replace with actual logic)
-    time.sleep(2)  # Simulate a delay
-    # response = f"Generated response for query:\n\n{query}" --> Replace the response with the following code
-    max_subqueries = 10  # Set your limit here
-    source_config = {
-        "use_gpt4o": True,         # Set to False to disable GPT-4o
-        "use_perplexity": True,    # Set to False to disable Perplexity
-        "use_google_search": True  # Set to False to disable Google Custom Search
-    }
-
-    response = recursive_query(response, max_subqueries, source_config)
-
-    return response
-
 # Submit button
 if st.button("Analyze"):
     if not company or not selected_subject:
@@ -670,3 +651,22 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Fatal error in query execution: {str(e)}")
         print(f"Error: {str(e)}")
+
+# Define function to process the query using your existing Python code
+def process_query(query):
+    # Replace this with your actual code logic
+    st.info(f"Processing query:\n\n{query}")
+
+    # Simulating API request (Replace with actual logic)
+    time.sleep(2)  # Simulate a delay
+    # response = f"Generated response for query:\n\n{query}" --> Replace the response with the following code
+    max_subqueries = 10  # Set your limit here
+    source_config = {
+        "use_gpt4o": True,         # Set to False to disable GPT-4o
+        "use_perplexity": True,    # Set to False to disable Perplexity
+        "use_google_search": True  # Set to False to disable Google Custom Search
+    }
+
+    response = recursive_query(query, max_subqueries, source_config)
+
+    return response
