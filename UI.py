@@ -57,21 +57,6 @@ else:
 
 custom_query = st.text_area("Custom Query (Optional)", pre_defined_prompt, height=150)
 
-# Submit button
-if st.button("Analyze"):
-    if not company or not selected_subject:
-        st.error("Please select a company and a research subject.")
-    else:
-        final_query = custom_query  # This includes the auto-populated or modified query
-        st.info(f"Submitting query:\n\n{final_query}")
-
-        # Call the function to process the query
-        response = process_query(final_query)
-
-        # Display the result
-        st.success("Query processed successfully!")
-        st.write(response)
-
 import requests
 import time
 import logging
@@ -670,3 +655,18 @@ def process_query(query):
     response = recursive_query(query, max_subqueries, source_config)
 
     return response
+
+# Submit button
+if st.button("Analyze"):
+    if not company or not selected_subject:
+        st.error("Please select a company and a research subject.")
+    else:
+        final_query = custom_query  # This includes the auto-populated or modified query
+        st.info(f"Submitting query:\n\n{final_query}")
+
+        # Call the function to process the query
+        response = process_query(final_query)
+
+        # Display the result
+        st.success("Query processed successfully!")
+        st.write(response)
