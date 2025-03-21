@@ -1,8 +1,10 @@
 import streamlit as st
 import requests
 import logging
+import time
+from datetime import datetime
 
-# Set up logging
+# Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
 # Define company options
@@ -41,24 +43,28 @@ else:
 
 custom_query = st.text_area("Custom Query (Optional)", pre_defined_prompt, height=150)
 
+# Define function to process the query using your existing Python code
+def process_query(query):
+    # Replace this with your actual code logic
+    st.info(f"Processing query:\n\n{query}")
+
+    # Simulating API request (Replace with actual logic)
+    time.sleep(2)  # Simulate a delay
+    response = f"Generated response for query:\n\n{query}"
+    
+    return response
+
 # Submit button
 if st.button("Analyze"):
     if not company or not selected_subject:
         st.error("Please select a company and a research subject.")
     else:
-        final_query = f"{custom_query}"  # This includes the auto-populated or modified query
+        final_query = custom_query  # This includes the auto-populated or modified query
         st.info(f"Submitting query:\n\n{final_query}")
 
-        # Backend API call (Replace with actual API URL and parameters)
-        api_url = "https://your-backend-api.com/query"
-        payload = {"query": final_query}
+        # Call the function to process the query
+        response = process_query(final_query)
 
-        try:
-            response = requests.post(api_url, json=payload)
-            if response.status_code == 200:
-                st.success("Query successfully submitted!")
-                st.write("Response:", response.json())
-            else:
-                st.error(f"Failed to submit query. Status code: {response.status_code}")
-        except Exception as e:
-            st.error(f"Error submitting query: {e}")
+        # Display the result
+        st.success("Query processed successfully!")
+        st.write(response)
