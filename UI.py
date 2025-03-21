@@ -662,7 +662,7 @@ def process_query(query):
     return response
 
 # Submit button
-if st.button("Analyze"):
+if analyze_button:
     if not company or not selected_subject:
         st.error("Please select a company and a research subject.")
     else:
