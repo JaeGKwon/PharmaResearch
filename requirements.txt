@@ -3,3 +3,4 @@ requests
 langchain
 langchain-openai
 openai
+langchain-community
