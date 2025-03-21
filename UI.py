@@ -67,7 +67,7 @@ from langchain_community.utilities import GoogleSearchAPIWrapper
 openai_api_key = st.secrets["OPENAI_API_KEY"]
 google_api_key = st.secrets["GOOGLE_API_KEY"]
 google_cse_id = st.secrets["GOOGLE_CSE_ID"]
-pplx_api_key = st.secrets["PPLX_API_KEY"]
+PPLX_API_KEY = st.secrets["PPLX_API_KEY"]
 
 gpt4o_llm = ChatOpenAI(model_name="gpt-4o", openai_api_key=openai_api_key)
 google_search = GoogleSearchAPIWrapper(google_api_key=google_api_key, google_cse_id=google_cse_id)
