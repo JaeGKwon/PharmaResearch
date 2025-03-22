@@ -6,6 +6,7 @@ from datetime import datetime
 import os
 import streamlit as st
 import subprocess
+from langchain_core.messages import HumanMessage, SystemMessage
 
 # Ensure required packages are installed in Streamlit environment
 # Ensure the correct LangChain version is installed
@@ -87,8 +88,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("QuerySystem")
-
-from langchain_core.messages import HumanMessage
 
 # Default configuration for sources
 DEFAULT_SOURCE_CONFIG = {
