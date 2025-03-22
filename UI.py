@@ -257,116 +257,98 @@ def break_down_query(query, max_subqueries=10, step_info=""):
         # Return the original query as a single item in case of error
         return [query]
 
+
 def cross_validate_and_combine(query, results, step_info=""):
+    import time
+    from langchain_core.messages import HumanMessage, SystemMessage
+
     log_prefix = f"{step_info} " if step_info else ""
-    logger.info(f"{log_prefix}Starting cross-validation and reconciliation for query: {query[:100]}...")
+    logger.info(f"{log_prefix}Starting content merge for query: {query[:100]} with real citations...")
 
-    # Identify active sources (those not disabled)
     active_sources = [src for src, content in results.items() if content != "Source disabled"]
-    logger.info(f"{log_prefix}Sources to reconcile: {', '.join(active_sources)}")
+    logger.info(f"{log_prefix}Sources to merge: {', '.join(active_sources)}")
 
-    # Log the length of results from each active source
     for source in active_sources:
-        result_content = results[source]
-        char_count = len(result_content)
-        word_count = len(result_content.split())
-        # Check if content starts with an error message
-        has_error = result_content.startswith("Error:") or "Exception:" in result_content
-
+        content = results[source]
+        char_count = len(content)
+        word_count = len(content.split())
+        has_error = content.startswith("Error:") or "Exception:" in content
         status = "ERROR" if has_error else "OK"
         logger.info(f"{log_prefix}Source: {source} | Status: {status} | {char_count} chars | ~{word_count} words")
 
-        # Log a snippet of each source's response
         if has_error:
-            logger.error(f"{log_prefix}Source {source} returned error: {result_content[:200]}")
+            logger.error(f"{log_prefix}Error in source {source}: {content[:200]}")
         else:
-            logger.info(f"{log_prefix}Source {source} snippet: {result_content[:150]}...")
+            logger.info(f"{log_prefix}Snippet from {source}: {content[:150]}...")
 
-    # Calculate effective sources (those without errors)
     effective_sources = [src for src in active_sources
                          if not results[src].startswith("Error") and
                             not "Exception:" in results[src]]
 
-    logger.info(f"{log_prefix}Effective sources for reconciliation: {len(effective_sources)}/{len(active_sources)}")
-
-    # If only one source is active or no effective sources, handle appropriately
-    if len(effective_sources) == 0:
-        logger.warning(f"{log_prefix}No effective sources available for reconciliation. Using best available source.")
-        # Return the longest result even if it's an error
+    if not effective_sources:
+        logger.warning(f"{log_prefix}No usable sources. Falling back to longest source.")
         best_source = max(active_sources, key=lambda src: len(results[src]))
-        logger.info(f"{log_prefix}Using best available source: {best_source}")
         return results[best_source]
-    elif len(effective_sources) == 1:
-        logger.info(f"{log_prefix}Only one effective source ({effective_sources[0]}), skipping cross-validation")
+
+    if len(effective_sources) == 1:
+        logger.info(f"{log_prefix}Only one effective source: {effective_sources[0]}")
         return results[effective_sources[0]]
 
-    # Log reconciliation approach
-    logger.info(f"{log_prefix}Starting detailed reconciliation process with {len(effective_sources)} sources")
+    logger.info(f"{log_prefix}Merging {len(effective_sources)} sources with citation extraction")
 
-    # Build prompt with only active and effective sources
-    combined_prompt = f"""
-    Cross-validate and combine results for the query: "{query}"
-
-    Your task is to reconcile and synthesize information from multiple sources.
-    Please analyze the following information sources carefully:
-    """
-
-    for source in effective_sources:
-        combined_prompt += f"""
-        {source}:
-        {results[source]}
+    # 🔧 Craft the prompt
+    combined_prompt = \
+        f"""
+        You are a research assistant. Merge the information from multiple sources into one comprehensive, structured report.
+        
+        🔍 Requirements:
+        - Do NOT summarize or paraphrase heavily.
+        - Include all detailed information, including technical terms or specifications.
+        - If multiple sources mention the same info, include it once only (de-duplicate).
+        - For each factual or statistical claim, infer and include a proper citation like:
+            - a URL
+            - article/publication title
+            - source name and year
+        - Use inline citation style like [1], [2], etc.
+        - At the end, include a "References" section that lists all cited sources with full details.
+        - You may use placeholders (e.g., "[citation needed]") only if no citation is available.
+        
+        Main Query: "{query}"
+        
+        Source Documents:
         """
 
-    combined_prompt += f"""
-    When creating your synthesis:
-    1) Identify key points of agreement between sources
-    2) Note any significant discrepancies or contradictions
-    3) Highlight unique insights provided by each source
-    4) Provide a coherent summary that integrates all reliable information
-    5) Add a brief assessment of the relative reliability of each source when they conflict
+    for source in effective_sources:
+        combined_prompt += f"\n---\n{results[source]}\n"
 
-    Provide a comprehensive, well-structured response that addresses the original query: "{query}"
-    """
+    combined_prompt += """
+Please write the merged, fully detailed, citation-annotated report now.
+"""
 
     try:
         start_time = time.time()
-        logger.info(f"{log_prefix}Sending reconciliation prompt to GPT-4o (length: {len(combined_prompt)} chars)")
+        logger.info(f"{log_prefix}Sending content merge prompt to GPT-4o...")
 
-        # Log a sample of the consolidation prompt for debugging
-        prompt_sample = combined_prompt[:500] + "..." if len(combined_prompt) > 500 else combined_prompt
-        logger.debug(f"{log_prefix}Reconciliation prompt sample: {prompt_sample}")
+        result = gpt4o_llm.invoke([
+            SystemMessage(content="You are a citation-focused research assistant. Always include full factual details and sources."),
+            HumanMessage(content=combined_prompt)
+        ]).content
 
-        result = gpt4o_llm.invoke([HumanMessage(content=combined_prompt)]).content
         elapsed_time = time.time() - start_time
-
-        # Log statistics about the reconciliation result
-        result_char_count = len(result)
-        result_word_count = len(result.split())
-        result_para_count = len([p for p in result.split('\n\n') if p.strip()])
-
-        logger.info(f"{log_prefix}Reconciliation completed in {elapsed_time:.2f} seconds")
-        logger.info(f"{log_prefix}Reconciliation result statistics: {result_char_count} chars | ~{result_word_count} words | ~{result_para_count} paragraphs")
-        logger.info(f"{log_prefix}Reconciliation result (first 200 chars): {result[:200]}...")
-
-        # Log a signature indicating this was a reconciled result
-        reconciliation_signature = f"[Reconciled from {len(effective_sources)} sources: {', '.join(effective_sources)}]"
-        logger.info(f"{log_prefix}Reconciliation signature: {reconciliation_signature}")
+        logger.info(f"{log_prefix}Merged result generated in {elapsed_time:.2f} seconds")
+        logger.debug(f"{log_prefix}First 500 chars of result:\n{result[:500]}")
 
         return result
+
     except Exception as e:
-        error_msg = str(e)
-        logger.error(f"{log_prefix}Error during reconciliation process: {error_msg}")
-
-        # Fallback strategy - return the longest result from effective sources
+        logger.error(f"{log_prefix}Error during merge: {str(e)}")
         try:
-            logger.warning(f"{log_prefix}Using fallback strategy: returning longest result from effective sources")
-            best_source = max(effective_sources, key=lambda src: len(results[src]))
-            logger.info(f"{log_prefix}Fallback to source: {best_source}")
-            fallback_result = f"[Reconciliation failed, using {best_source} only] {results[best_source]}"
-            return fallback_result
+            fallback_source = max(effective_sources, key=lambda src: len(results[src]))
+            return f"[Fallback: using {fallback_source} only]\n\n{results[fallback_source]}"
         except:
-            return f"Error during cross-validation: {error_msg}. Failed to apply fallback strategy."
+            return f"Error during merge and fallback failed: {str(e)}"
 
+#added
 def recursive_query(query, max_subqueries=10, source_config=None):
     # Use default source configuration if none provided
     if source_config is None:
@@ -471,40 +453,37 @@ def recursive_query(query, max_subqueries=10, source_config=None):
         logger.info(f"{step4_info} Total content from all sub-queries: {total_sub_content} chars")
         logger.info(f"{step4_info} Average sub-query result length: {avg_sub_length:.1f} chars")
 
-        # Prepare the prompt for final integration
+        # Create the integration prompt using formal section headers
         combined_prompt = f"""
-        Combine and synthesize the following sub-query results to comprehensively answer the main query:
+        You are a research assistant generating a detailed formal report based on responses to a set of sub-questions.
 
-        MAIN QUERY: "{query}"
+        🎯 Objective:
+        Generate a professional, detailed report that addresses the main query:
+        "{query}"
 
-        You have been provided with results from {len(sub_queries)} sub-queries that together address
-        different aspects of this main query. Your task is to synthesize these results into a cohesive
-        and comprehensive response.
+        📌 Requirements:
+        - Create a formal report with clear, informative section headings.
+        - Do NOT summarize or shorten sub-query responses. Include all details.
+        - Rewrite each sub-query as a formal heading (e.g., "FDA Inspection History" instead of "Sub-query 1").
+        - Present the full response beneath each heading.
+        - Do not mention the word "sub-query" or use numbering like "Sub-query 1".
+        - At the end, include a "References" section if citations are mentioned.
 
-        SUB-QUERY RESULTS:
+        The following are the sub-questions and their answers. Please incorporate each in full:
+
         """
 
-        # Add each sub-query result with clear labeling
-        for idx, (sq, res) in enumerate(combined_sub_results.items(), 1):
+        for idx, (sub_q, sub_result) in enumerate(combined_sub_results.items(), 1):
             combined_prompt += f"""
-
-        SUB-QUERY {idx}: "{sq}"
-        {'-' * 40}
-        RESULT:
-        {res}
-        {'-' * 40}
+        ### {sub_q}
+        {sub_result}
         """
 
         combined_prompt += """
 
-        YOUR SYNTHESIS SHOULD:
-        1) Begin with a clear and concise summary of the main findings
-        2) Organize information logically by topic rather than by sub-query
-        3) Avoid unnecessary repetition while preserving important details
-        4) Address any contradictions or inconsistencies between sub-query results
-        5) Ensure all major aspects of the main query are addressed
-
-        Provide a comprehensive, well-structured response that fully addresses the main query.
+        ---
+        Now generate the final report based on the sections above.
+        Ensure the language is formal, objective, and professional.
         """
 
         # Log information about the integration prompt
