@@ -56,7 +56,7 @@ if selected_subject and company:
 else:
     pre_defined_prompt = ""
 
-custom_query = st.text_area("Custom Query (Optional)", pre_defined_prompt, height=150)
+custom_query = st.text_area("Custom Query (Optional). You can modify the query", pre_defined_prompt, height=150)
 
 # Load the Button **Immediately**
 analyze_button = st.button("Analyze")  # Button appears first
