@@ -509,7 +509,7 @@ if analyze_button:
             try:
                 final_result = recursive_query(
                     query=final_query,
-                    max_subqueries=30,
+                    max_subqueries=20,
                     source_config={
                         "use_gpt4o": True,
                         "use_perplexity": True,
