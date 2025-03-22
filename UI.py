@@ -2,22 +2,10 @@ import streamlit as st
 import requests
 import logging
 import time
-from datetime import datetime
 import os
-import streamlit as st
 import subprocess
 from langchain_core.messages import HumanMessage, SystemMessage
-
-# Ensure required packages are installed in Streamlit environment
-# Ensure the correct LangChain version is installed
-#try:
-#    from langchain_openai import ChatOpenAI  # Correct import for 2024+
-#except ImportError:
-#    st.warning("🔄 Installing missing dependencies...")
-#    subprocess.run(["pip", "install", "--upgrade", "langchain-openai"], check=True)
-#    from langchain_openai import ChatOpenAI  # Retry import after installation
-
-#st.success("✅ ChatOpenAI successfully imported!")
+from datetime import datetime
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -34,14 +22,16 @@ research_prompts = {
     "Services Portfolio": "Review the service portfolio and specializations of {company}. Focus on:\n1) Core service offerings\n2) Unique capabilities\n3) Service delivery model\n4) Client segments served"
 }
 
-# Streamlit UI
-st.title("Company Research Tool")
+import streamlit as st
+
+# Title (same size as subtitle)
+st.markdown("## Company Research Tool")
 
 # Company selection
 company = st.selectbox("Company", companies, index=None, placeholder="Select a company")
 
 # Research subject selection
-st.subheader("Research Subject")
+st.markdown("## Research Subject")
 selected_subject = st.radio(
     label="Choose a research subject",
     options=list(research_prompts.keys()),
@@ -59,7 +49,8 @@ else:
 custom_query = st.text_area("Custom Query (Optional). You can modify the query", pre_defined_prompt, height=150)
 
 # Load the Button **Immediately**
-analyze_button = st.button("Analyze")  # Button appears first
+analyze_button = st.button("Analyze")
+
 
 
 
