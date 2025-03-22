@@ -258,351 +258,234 @@ def break_down_query(query, max_subqueries=10, step_info=""):
         return [query]
 
 
-def cross_validate_and_combine(query, results, step_info=""):
+def cross_validate_and_combine(query, results, step_info="", streamlit_callback=None):
     import time
     from langchain_core.messages import HumanMessage, SystemMessage
 
     log_prefix = f"{step_info} " if step_info else ""
-    logger.info(f"{log_prefix}Starting content merge for query: {query[:100]} with real citations...")
+    if streamlit_callback:
+        streamlit_callback(f"{log_prefix}Starting content merge for query: {query[:100]}...")
+    logger.info(f"{log_prefix}Starting content merge for query: {query[:100]}...")
 
     active_sources = [src for src, content in results.items() if content != "Source disabled"]
     logger.info(f"{log_prefix}Sources to merge: {', '.join(active_sources)}")
+    if streamlit_callback:
+        streamlit_callback(f"{log_prefix}Sources to merge: {', '.join(active_sources)}")
 
     for source in active_sources:
-        content = results[source]
-        char_count = len(content)
-        word_count = len(content.split())
-        has_error = content.startswith("Error:") or "Exception:" in content
+        result_content = results[source]
+        char_count = len(result_content)
+        word_count = len(result_content.split())
+        has_error = result_content.startswith("Error:") or "Exception:" in result_content
         status = "ERROR" if has_error else "OK"
+
         logger.info(f"{log_prefix}Source: {source} | Status: {status} | {char_count} chars | ~{word_count} words")
+        if streamlit_callback:
+            streamlit_callback(f"{log_prefix}Source: {source} | Status: {status} | {char_count} chars | ~{word_count} words")
 
         if has_error:
-            logger.error(f"{log_prefix}Error in source {source}: {content[:200]}")
+            logger.error(f"{log_prefix}Source {source} returned error: {result_content[:200]}")
+            if streamlit_callback:
+                streamlit_callback(f"{log_prefix}Source {source} returned error.")
         else:
-            logger.info(f"{log_prefix}Snippet from {source}: {content[:150]}...")
+            logger.info(f"{log_prefix}Source {source} snippet: {result_content[:150]}...")
 
     effective_sources = [src for src in active_sources
                          if not results[src].startswith("Error") and
                             not "Exception:" in results[src]]
 
-    if not effective_sources:
-        logger.warning(f"{log_prefix}No usable sources. Falling back to longest source.")
+    logger.info(f"{log_prefix}Effective sources: {len(effective_sources)}/{len(active_sources)}")
+    if streamlit_callback:
+        streamlit_callback(f"{log_prefix}Effective sources: {len(effective_sources)}/{len(active_sources)}")
+
+    if len(effective_sources) == 0:
+        logger.warning(f"{log_prefix}No usable content, falling back to longest source (even if error).")
+        if streamlit_callback:
+            streamlit_callback(f"{log_prefix}No usable content. Using fallback.")
         best_source = max(active_sources, key=lambda src: len(results[src]))
         return results[best_source]
 
     if len(effective_sources) == 1:
-        logger.info(f"{log_prefix}Only one effective source: {effective_sources[0]}")
+        logger.info(f"{log_prefix}Only one usable source: {effective_sources[0]}. Returning as is.")
+        if streamlit_callback:
+            streamlit_callback(f"{log_prefix}Only one effective source. Skipping merge.")
         return results[effective_sources[0]]
 
-    logger.info(f"{log_prefix}Merging {len(effective_sources)} sources with citation extraction")
+    logger.info(f"{log_prefix}Merging {len(effective_sources)} sources")
+    if streamlit_callback:
+        streamlit_callback(f"{log_prefix}Merging content from {len(effective_sources)} sources...")
 
-    # 🔧 Craft the prompt
-    combined_prompt = \
-        f"""
-        You are a research assistant. Merge the information from multiple sources into one comprehensive, structured report.
-        
-        🔍 Requirements:
-        - Do NOT summarize or paraphrase heavily.
-        - Include all detailed information, including technical terms or specifications.
-        - If multiple sources mention the same info, include it once only (de-duplicate).
-        - For each factual or statistical claim, infer and include a proper citation like:
-            - a URL
-            - article/publication title
-            - source name and year
-        - Use inline citation style like [1], [2], etc.
-        - At the end, include a "References" section that lists all cited sources with full details.
-        - You may use placeholders (e.g., "[citation needed]") only if no citation is available.
-        
-        Main Query: "{query}"
-        
-        Source Documents:
-        """
+    combined_prompt = f"""
+You are a research assistant. Merge the information from multiple sources into one comprehensive, structured report.
+
+🔍 Requirements:
+- Do NOT summarize, simplify, or remove technical or descriptive information.
+- Preserve all unique phrasing, terminology, and contextual richness.
+- If multiple sources mention the same info, include it once but retain extra context.
+- Add proper citations (URL, article title, publisher) where relevant.
+- Use inline citation style like [1], [2], etc.
+- Include a References section at the end.
+
+Main Query: "{query}"
+
+Source Documents:
+"""
 
     for source in effective_sources:
         combined_prompt += f"\n---\n{results[source]}\n"
 
     combined_prompt += """
-Please write the merged, fully detailed, citation-annotated report now.
+Now write the full, detailed, citation-annotated report.
 """
 
     try:
         start_time = time.time()
-        logger.info(f"{log_prefix}Sending content merge prompt to GPT-4o...")
+        logger.info(f"{log_prefix}Sending merge prompt to GPT-4o...")
+        if streamlit_callback:
+            streamlit_callback(f"{log_prefix}Sending merge prompt to GPT-4o...")
 
         result = gpt4o_llm.invoke([
-            SystemMessage(content="You are a citation-focused research assistant. Always include full factual details and sources."),
+            SystemMessage(content="You are a citation-focused research assistant. Preserve all details and add source citations."),
             HumanMessage(content=combined_prompt)
         ]).content
 
         elapsed_time = time.time() - start_time
-        logger.info(f"{log_prefix}Merged result generated in {elapsed_time:.2f} seconds")
-        logger.debug(f"{log_prefix}First 500 chars of result:\n{result[:500]}")
+        logger.info(f"{log_prefix}Merge completed in {elapsed_time:.2f} seconds")
+        if streamlit_callback:
+            streamlit_callback(f"{log_prefix}Merge completed in {elapsed_time:.2f} seconds")
 
         return result
 
     except Exception as e:
-        logger.error(f"{log_prefix}Error during merge: {str(e)}")
-        try:
-            fallback_source = max(effective_sources, key=lambda src: len(results[src]))
-            return f"[Fallback: using {fallback_source} only]\n\n{results[fallback_source]}"
-        except:
-            return f"Error during merge and fallback failed: {str(e)}"
+        error_msg = str(e)
+        logger.error(f"{log_prefix}Error during merge: {error_msg}")
+        if streamlit_callback:
+            streamlit_callback(f"{log_prefix}Error during merge: {error_msg}")
 
-#added
-def recursive_query(query, max_subqueries=10, source_config=None):
-    # Use default source configuration if none provided
+        try:
+            logger.warning(f"{log_prefix}Fallback: Using longest result from effective sources.")
+            if streamlit_callback:
+                streamlit_callback(f"{log_prefix}Fallback strategy: returning longest result.")
+            best_source = max(effective_sources, key=lambda src: len(results[src]))
+            return f"[Fallback to {best_source} only]\n\n{results[best_source]}"
+        except:
+            return f"Error during merge and fallback failed: {error_msg}"
+
+
+############
+def recursive_query(query, max_subqueries=10, source_config=None, streamlit_callback=None):
     if source_config is None:
         source_config = DEFAULT_SOURCE_CONFIG
 
-    # Log which sources are enabled
     enabled_sources = [source for source, enabled in source_config.items() if enabled]
 
-    logger.info(f"===== STARTING RECURSIVE QUERY =====")
-    logger.info(f"Main query: {query}")
-    logger.info(f"Maximum sub-queries: {max_subqueries}")
-    logger.info(f"Enabled sources: {', '.join(enabled_sources)}")
+    if streamlit_callback:
+        streamlit_callback("===== STARTING RECURSIVE QUERY =====")
+        streamlit_callback(f"Main query: {query}")
+        streamlit_callback(f"Maximum sub-queries: {max_subqueries}")
+        streamlit_callback(f"Enabled sources: {', '.join(enabled_sources)}")
 
-    # Create a timestamp for this query execution
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    logger.info(f"Query execution ID: {timestamp}")
-
     start_time_total = time.time()
 
-    # Define total steps for this process
-    total_steps = 7  # Adjust based on your workflow
+    if streamlit_callback:
+        streamlit_callback("\nSTEP 1: QUERY ANALYSIS")
 
-    # Clear step separation
-    logger.info("\n" + "="*50)
-    logger.info(f"STEP 1 OF {total_steps}: QUERY ANALYSIS")
-    logger.info("="*50)
+    needs_breakdown = should_break_down_query(query, "[Step 1]")
 
-    # Step 1: Determine if query should be broken down
-    step1_info = f"[Step 1/{total_steps}]"
-    logger.info(f"{step1_info} Determining if query needs to be broken down")
-    needs_breakdown = should_break_down_query(query, step1_info)
-
-    # Clear step separation
-    logger.info("\n" + "="*50)
-    logger.info(f"STEP 2 OF {total_steps}: " + ("QUERY DECOMPOSITION" if needs_breakdown else "DIRECT QUERY PROCESSING"))
-    logger.info("="*50)
+    if streamlit_callback:
+        streamlit_callback("\nSTEP 2: " + ("QUERY DECOMPOSITION" if needs_breakdown else "DIRECT QUERY PROCESSING"))
 
     if needs_breakdown:
-        # Step 2: Break down query
-        step2_info = f"[Step 2/{total_steps}]"
-        logger.info(f"{step2_info} Breaking down complex query")
-        sub_queries = break_down_query(query, max_subqueries, step2_info)
+        sub_queries = break_down_query(query, max_subqueries, "[Step 2]")
 
-        # Clear step separation
-        logger.info("\n" + "="*50)
-        logger.info(f"STEP 3 OF {total_steps}: SUB-QUERY PROCESSING")
-        logger.info("="*50)
+        if streamlit_callback:
+            streamlit_callback(f"\nSTEP 3: PROCESSING {len(sub_queries)} SUB-QUERIES")
 
-        # Step 3: Process sub-queries
-        step3_info = f"[Step 3/{total_steps}]"
-        logger.info(f"{step3_info} Beginning to process {len(sub_queries)} sub-queries")
         combined_sub_results = {}
 
-        # Track metrics for each sub-query
-        sub_query_metrics = {}
-
         for i, sub_query in enumerate(sub_queries, 1):
-            sub_step_info = f"{step3_info} Sub-query {i}/{len(sub_queries)}"
-            logger.info(f"\n{'-'*40}")
-            logger.info(f"{sub_step_info}: {sub_query}")
-            logger.info(f"{'-'*40}")
-            sub_start_time = time.time()
+            if streamlit_callback:
+                streamlit_callback(f"\n🔹 Sub-query {i}/{len(sub_queries)}: {sub_query}")
 
-            # Step 3a: Query sources for each sub-query
-            results = query_all_sources(sub_query, f"{sub_step_info} - Source Querying", source_config)
-
-            # Step 3b: Validate and combine results for each sub-query
+            results = query_all_sources(sub_query, f"[Step 3] Sub-query {i}", source_config)
             sub_result = cross_validate_and_combine(
-                sub_query,
-                results,
-                f"{sub_step_info} - Result Validation"
+                sub_query, results, f"[Step 3] Sub-query {i} Result"
             )
-
             combined_sub_results[sub_query] = sub_result
 
-            # Calculate metrics for this sub-query
-            sub_elapsed_time = time.time() - sub_start_time
-            sub_query_metrics[sub_query] = {
-                "execution_time": sub_elapsed_time,
-                "result_length": len(sub_result),
-                "word_count": len(sub_result.split()),
-                "sources_used": [src for src, content in results.items()
-                                if content != "Source disabled" and not content.startswith("Error")]
-            }
+        if streamlit_callback:
+            streamlit_callback("\nSTEP 4: FINAL INTEGRATION")
 
-            logger.info(f"{sub_step_info} completed in {sub_elapsed_time:.2f} seconds")
-            logger.info(f"{sub_step_info} result length: {sub_query_metrics[sub_query]['result_length']} chars")
-            logger.info(f"{sub_step_info} result word count: ~{sub_query_metrics[sub_query]['word_count']} words")
-
-        # Clear step separation
-        logger.info("\n" + "="*50)
-        logger.info(f"STEP 4 OF {total_steps}: FINAL INTEGRATION")
-        logger.info("="*50)
-
-        # Step 4: Final combination of all sub-query results
-        step4_info = f"[Step 4/{total_steps}]"
-        logger.info(f"{step4_info} Combining all sub-query results (from {len(sub_queries)} sub-queries)")
-
-        # Log statistics about sub-queries before integration
-        total_sub_content = sum(len(res) for res in combined_sub_results.values())
-        avg_sub_length = total_sub_content / len(combined_sub_results) if combined_sub_results else 0
-        logger.info(f"{step4_info} Total content from all sub-queries: {total_sub_content} chars")
-        logger.info(f"{step4_info} Average sub-query result length: {avg_sub_length:.1f} chars")
-
-        # Create the integration prompt using formal section headers
         combined_prompt = f"""
-        You are a research assistant generating a detailed formal report based on responses to a set of sub-questions.
+You are a research assistant generating a detailed formal report based on responses to a set of sub-questions.
 
-        🎯 Objective:
-        Generate a professional, detailed report that addresses the main query:
-        "{query}"
+🎯 Objective:
+Generate a professional, detailed report that addresses the main query:
+"{query}"
 
-        📌 Requirements:
-        - Create a formal report with clear, informative section headings.
-        - Do NOT summarize or shorten sub-query responses. Include all details.
-        - Rewrite each sub-query as a formal heading (e.g., "FDA Inspection History" instead of "Sub-query 1").
-        - Present the full response beneath each heading.
-        - Do not mention the word "sub-query" or use numbering like "Sub-query 1".
-        - At the end, include a "References" section if citations are mentioned.
+📌 Requirements:
+- Create a formal report with clear, informative section headings.
+- Do NOT summarize or shorten sub-query responses. Include all details.
+- Rewrite each sub-query as a formal heading.
+- Present the full response beneath each heading.
+- Do not mention the word \"sub-query\" or use numbering like \"Sub-query 1\".
+- At the end, include a \"References\" section if citations are mentioned.
 
-        The following are the sub-questions and their answers. Please incorporate each in full:
+The following are the sub-questions and their answers. Please incorporate each in full:
+"""
 
-        """
-
-        for idx, (sub_q, sub_result) in enumerate(combined_sub_results.items(), 1):
+        for sub_q, sub_result in combined_sub_results.items():
             combined_prompt += f"""
-        ### {sub_q}
-        {sub_result}
-        """
+### {sub_q}
+{sub_result}
+"""
 
         combined_prompt += """
+---
+Now generate the final report based on the sections above.
+Ensure the language is formal, objective, and professional.
+"""
 
-        ---
-        Now generate the final report based on the sections above.
-        Ensure the language is formal, objective, and professional.
-        """
-
-        # Log information about the integration prompt
-        logger.info(f"{step4_info} Integration prompt length: {len(combined_prompt)} chars")
-
-        final_start_time = time.time()
         try:
-            logger.info(f"{step4_info} Sending final integration request to GPT-4o")
-            final_result = gpt4o_llm.invoke([HumanMessage(content=combined_prompt)]).content
-            final_elapsed_time = time.time() - final_start_time
-
-            # Log statistics about the final result
-            final_char_count = len(final_result)
-            final_word_count = len(final_result.split())
-            final_para_count = len([p for p in final_result.split('\n\n') if p.strip()])
-            compression_ratio = final_char_count / total_sub_content if total_sub_content > 0 else 0
-
-            logger.info(f"{step4_info} Final integration completed in {final_elapsed_time:.2f} seconds")
-            logger.info(f"{step4_info} Final result statistics:")
-            logger.info(f"{step4_info} - Character count: {final_char_count}")
-            logger.info(f"{step4_info} - Approximate word count: {final_word_count}")
-            logger.info(f"{step4_info} - Paragraph count: {final_para_count}")
-            logger.info(f"{step4_info} - Compression ratio: {compression_ratio:.2f} (final size / total inputs)")
-            logger.info(f"{step4_info} - Result snippet: {final_result[:200]}...")
+            final_result = gpt4o_llm.invoke([
+                SystemMessage(content="You are a citation-focused research assistant."),
+                HumanMessage(content=combined_prompt)
+            ]).content
         except Exception as e:
-            logger.error(f"{step4_info} Error in final integration: {str(e)}")
+            final_result = f"Error during final integration: {str(e)}"
 
-            # Attempt fallback strategy
-            logger.warning(f"{step4_info} Attempting fallback integration strategy")
-            try:
-                # Simple concatenation fallback
-                fallback_result = f"MAIN QUERY: {query}\n\n"
-                for idx, (sq, res) in enumerate(combined_sub_results.items(), 1):
-                    fallback_result += f"SUB-QUERY {idx}: {sq}\n{'-' * 40}\n{res}\n\n"
-
-                fallback_result += "\n[Note: This is a simple concatenation of sub-query results due to integration error]"
-                final_result = fallback_result
-                logger.info(f"{step4_info} Fallback integration applied successfully")
-            except Exception as fallback_error:
-                logger.error(f"{step4_info} Fallback integration also failed: {str(fallback_error)}")
-                final_result = f"Error during final integration: {str(e)}. Fallback also failed."
     else:
-        # Alternative flow when no breakdown is needed
-        # Step 2 (in this path): Direct query of all sources
-        step2_direct_info = f"[Step 2/{total_steps}]"
-        logger.info(f"{step2_direct_info} Processing query directly (no sub-queries)")
-        results = query_all_sources(query, step2_direct_info, source_config)
+        if streamlit_callback:
+            streamlit_callback("\nSTEP 2: DIRECT QUERY PROCESSING")
 
-        # Clear step separation
-        logger.info("\n" + "="*50)
-        logger.info(f"STEP 3 OF {total_steps}: RESULT INTEGRATION")
-        logger.info("="*50)
+        results = query_all_sources(query, "[Step 2]", source_config)
 
-        # Step 3 (in this path): Cross-validate and combine
-        step3_direct_info = f"[Step 3/{total_steps}]"
-        final_result = cross_validate_and_combine(query, results, step3_direct_info)
+        if streamlit_callback:
+            streamlit_callback("\nSTEP 3: COMBINING RESULTS")
 
-        # Since we're skipping step 4 in this path, add a placeholder
-        logger.info("\n" + "="*50)
-        logger.info(f"STEP 4 OF {total_steps}: SKIPPED (NOT NEEDED FOR DIRECT QUERIES)")
-        logger.info("="*50)
+        final_result = cross_validate_and_combine(query, results, "[Step 3]")
 
-    # Clear step separation
-    logger.info("\n" + "="*50)
-    logger.info(f"STEP 5 OF {total_steps}: FINALIZATION")
-    logger.info("="*50)
+    if streamlit_callback:
+        streamlit_callback("\nSTEP 4: FINALIZATION")
+        streamlit_callback(f"Total execution time: {time.time() - start_time_total:.2f} seconds")
 
-    # Step 5: Calculate stats and wrap up
-    step5_info = f"[Step 5/{total_steps}]"
-    total_elapsed_time = time.time() - start_time_total
-    logger.info(f"{step5_info} Total execution time: {total_elapsed_time:.2f} seconds")
-
-    # Clear step separation
-    logger.info("\n" + "="*50)
-    logger.info(f"STEP 6 OF {total_steps}: RESULT STORAGE")
-    logger.info("="*50)
-
-    # Step 6: Save results
-    step6_info = f"[Step 6/{total_steps}]"
-    result_filename = f"query_result_{timestamp}.txt"
     try:
+        result_filename = f"query_result_{timestamp}.txt"
         with open(result_filename, 'w') as f:
             f.write(f"Query: {query}\n\n")
             f.write(f"Enabled sources: {', '.join(enabled_sources)}\n\n")
             f.write(f"Result:\n{final_result}")
-        logger.info(f"{step6_info} Result saved to {result_filename}")
+        if streamlit_callback:
+            streamlit_callback(f"Result saved to {result_filename}")
     except Exception as e:
-        logger.error(f"{step6_info} Error saving result to file: {str(e)}")
+        if streamlit_callback:
+            streamlit_callback(f"Error saving result to file: {str(e)}")
 
-    # Clear step separation
-    logger.info("\n" + "="*50)
-    logger.info(f"STEP 7 OF {total_steps}: COMPLETION")
-    logger.info("="*50)
-
-    # Step 7: Return results
-    step7_info = f"[Step 7/{total_steps}]"
-    logger.info(f"{step7_info} Query execution completed successfully")
-    logger.info(f"\n===== RECURSIVE QUERY COMPLETED in {total_elapsed_time:.2f} seconds =====")
+    if streamlit_callback:
+        streamlit_callback("\nSTEP 5: COMPLETED")
 
     return final_result
-
-# Define function to process the query using your existing Python code
-def process_query(query):
-    # Replace this with your actual code logic
-    st.info(f"Processing query:\n\n{query}")
-
-    # Simulating API request (Replace with actual logic)
-    time.sleep(2)  # Simulate a delay
-    # response = f"Generated response for query:\n\n{query}" --> Replace the response with the following code
-    max_subqueries = 10  # Set your limit here
-    source_config = {
-        "use_gpt4o": True,         # Set to False to disable GPT-4o
-        "use_perplexity": True,    # Set to False to disable Perplexity
-        "use_google_search": True  # Set to False to disable Google Custom Search
-    }
-
-    response = recursive_query(query, max_subqueries, source_config)
-
-    return response
 
 
 if analyze_button:
@@ -610,32 +493,37 @@ if analyze_button:
         st.error("Please select a company and a research subject.")
     else:
         final_query = custom_query
-        st.info(f"Submitting query:\n\n{final_query}")
+        st.info(f"📨 Submitting query:\n\n{final_query}")
 
-        # ✅ Add real-time status updates
+        # Capture progress messages
+        progress_log = []
+
         with st.status("Processing your query...", expanded=True) as status:
-            st.write("🛠️ Step 1: Validating query...")
-            time.sleep(1)  # Simulating validation
+            def update_ui(msg):
+                progress_log.append(msg)
+                status.write(msg)
 
-            st.write("🔍 Step 2: Fetching data from GPT-4o...")
-            gpt_result = query_all_sources(final_query, "GPT-4o Processing", {"use_gpt4o": True})
+            update_ui("🛠️ Step 1: Validating and analyzing query...")
+            time.sleep(1)
 
-            st.write("🌐 Step 3: Fetching data from Google Search...")
-            google_result = query_all_sources(final_query, "Google Search Processing", {"use_google_search": True})
+            update_ui("🔄 Step 2: Launching recursive query process...")
+            try:
+                final_result = recursive_query(
+                    query=final_query,
+                    max_subqueries=15,
+                    source_config={
+                        "use_gpt4o": True,
+                        "use_perplexity": True,
+                        "use_google_search": True
+                    },
+                    streamlit_callback=update_ui  # 👈 live progress updates
+                )
 
-            st.write("🤖 Step 4: Fetching data from Perplexity AI...")
-            perplexity_result = query_perplexity(final_query, "Perplexity AI Processing")
+                status.update(label="✅ Query Processed Successfully!", state="complete")
+                st.success("Here is your full result:")
+                st.write(final_result)
 
-            st.write("🛠️ Step 5: Cross-validating responses...")
-            combined_result = cross_validate_and_combine(final_query, {
-                "GPT-4o": gpt_result.get("GPT-4o", "No data"),
-                "Google Search": google_result.get("Google Custom Search", "No data"),
-                "Perplexity AI": perplexity_result
-            })
+            except Exception as e:
+                status.update(label="❌ Query Failed", state="error")
+                st.error(f"An error occurred during processing: {e}")
 
-            # ✅ Mark as complete
-            status.update(label="✅ Query Processed Successfully!", state="complete")
-
-        # Display the result
-        st.success("Query processed successfully!")
-        st.write(combined_result)
