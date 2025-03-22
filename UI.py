@@ -23,7 +23,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
 # Define company options
-companies = ["FONZA", "SAMSUNG BIOLOGICS", "Boston Institute of Biotechnology"]
+companies = ["LONZA", "SAMSUNG BIOLOGICS", "WuXi Biologics", "Piramal Pharma Solutions", "Boston Institute of Biotechnology"]
 
 # Define research subjects and prompts
 research_prompts = {
