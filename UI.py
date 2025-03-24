@@ -663,7 +663,6 @@ def recursive_query(query, max_subqueries=10, source_config=None, streamlit_call
 
 
 
-
 if analyze_button:
     if not company or not selected_subject:
         st.error("Please select a company and a research subject.")
@@ -673,6 +672,9 @@ if analyze_button:
 
         # Capture progress messages
         progress_log = []
+        execution_completed = False
+        execution_result = None
+        execution_error = None
 
         with st.status("Processing your query...", expanded=True) as status:
             def update_ui(msg):
@@ -696,35 +698,44 @@ if analyze_button:
                     max_concurrent_subqueries=max_concurrent_subqueries,  # Use the slider value
                     max_concurrent_sources=max_concurrent_sources  # Use the slider value
                 )
-
-                status.update(label="✅ Query Processed Successfully!", state="complete")
-                st.success("Here is your full result:")
-                st.write(final_result)
-
-                # Add download button for the result
-                result_txt = f"Query: {final_query}\n\n{final_result}"
-                st.download_button(
-                    label="Download Results",
-                    data=result_txt,
-                    file_name=f"{company}_{selected_subject}.txt",
-                    mime="text/plain"
-                )
                 
-                # Add an expandable section with execution details
-                with st.expander("Execution Details"):
-                    st.write("**Progress Log:**")
-                    for log_entry in progress_log:
-                        st.write(log_entry)
-                    
-                    st.write(f"**Concurrency Settings:**")
-                    st.write(f"- Max concurrent sub-queries: {max_concurrent_subqueries}")
-                    st.write(f"- Max concurrent source queries: {max_concurrent_sources}")
+                execution_completed = True
+                execution_result = final_result
+                
+                status.update(label="✅ Query Processed Successfully!", state="complete")
 
             except Exception as e:
-                status.update(label="❌ Query Failed", state="error")
-                st.error(f"An error occurred during processing: {str(e)}")
-                
-                # Show traceback for debugging - FIXED: Don't use nested expander
-                st.error("Error Details:")
                 import traceback
-                st.code(traceback.format_exc())
+                execution_error = traceback.format_exc()
+                status.update(label="❌ Query Failed", state="error")
+                update_ui(f"Error: {str(e)}")
+
+        # Display results AFTER the status container is closed
+        if execution_completed:
+            st.success("Here is your full result:")
+            st.write(execution_result)
+
+            # Add download button for the result
+            result_txt = f"Query: {final_query}\n\n{execution_result}"
+            st.download_button(
+                label="Download Results",
+                data=result_txt,
+                file_name=f"{company}_{selected_subject}.txt",
+                mime="text/plain"
+            )
+            
+            # Add execution details OUTSIDE the status container
+            with st.expander("Execution Details"):
+                st.write("**Progress Log:**")
+                for log_entry in progress_log:
+                    st.write(log_entry)
+                
+                st.write(f"**Concurrency Settings:**")
+                st.write(f"- Max concurrent sub-queries: {max_concurrent_subqueries}")
+                st.write(f"- Max concurrent source queries: {max_concurrent_sources}")
+        
+        # Show error details OUTSIDE the status container
+        if execution_error:
+            st.error("An error occurred during processing")
+            with st.expander("Error Details"):
+                st.code(execution_error)
