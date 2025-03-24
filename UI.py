@@ -247,7 +247,6 @@ def break_down_query(query, max_subqueries=10, step_info=""):
         # Return the original query as a single item in case of error
         return [query]
 
-
 def cross_validate_and_combine(query, results, step_info="", streamlit_callback=None):
     import time
     from langchain_core.messages import HumanMessage, SystemMessage
@@ -309,12 +308,15 @@ def cross_validate_and_combine(query, results, step_info="", streamlit_callback=
 You are a research assistant. Merge the information from multiple sources into one comprehensive, structured report.
 
 🔍 Requirements:
-- Do NOT summarize, simplify, or remove technical or descriptive information.
-- Preserve all unique phrasing, terminology, and contextual richness.
-- If multiple sources mention the same info, include it once but retain extra context.
+- IMPORTANT: INCLUDE ALL INFORMATION in full detail. DO NOT summarize or condense content.
+- Retain 100% of the technical details, numerical data, and specialized terminology.
+- Preserve all unique phrasing, examples, explanations, and contextual elements.
+- Create a structure that accommodates all information without omission.
+- If multiple sources contain the same information, include all versions with their nuances.
 - Add proper citations (URL, article title, publisher) where relevant.
 - Use inline citation style like [1], [2], etc.
 - Include a References section at the end.
+- The final document should contain ALL the information from ALL sources, fully presented.
 
 Main Query: "{query}"
 
@@ -326,6 +328,9 @@ Source Documents:
 
     combined_prompt += """
 Now write the full, detailed, citation-annotated report.
+Include ALL information from ALL sources. 
+DO NOT summarize or condense any content.
+Comprehensiveness is the top priority.
 """
 
     try:
@@ -335,7 +340,7 @@ Now write the full, detailed, citation-annotated report.
             streamlit_callback(f"{log_prefix}Sending merge prompt to GPT-4o...")
 
         result = gpt4o_llm.invoke([
-            SystemMessage(content="You are a citation-focused research assistant. Preserve all details and add source citations."),
+            SystemMessage(content="You are a citation-focused research assistant. Your primary goal is to preserve ALL details and information from ALL sources without summarization. Comprehensiveness is more important than conciseness."),
             HumanMessage(content=combined_prompt)
         ]).content
 
@@ -411,18 +416,22 @@ def recursive_query(query, max_subqueries=10, source_config=None, streamlit_call
 You are a research assistant generating a detailed formal report based on responses to a set of sub-questions.
 
 🎯 Objective:
-Generate a professional, detailed report that addresses the main query:
+Generate a comprehensive professional report that addresses the main query:
 "{query}"
 
 📌 Requirements:
 - Create a formal report with clear, informative section headings.
-- Do NOT summarize or shorten sub-query responses. Include all details.
+- CRITICAL: INCLUDE ALL INFORMATION FROM ALL SUB-QUERY RESPONSES WITH NO OMISSIONS.
+- Do NOT summarize, condense, or shorten any content from sub-query responses.
+- Include every detail, example, explanation, and nuance from the original responses.
 - Rewrite each sub-query as a formal heading.
-- Present the full response beneath each heading.
-- Do not mention the word \"sub-query\" or use numbering like \"Sub-query 1\".
-- At the end, include a \"References\" section if citations are mentioned.
+- Present the complete, unabridged response beneath each heading.
+- Keep all technical details, specialized terminology, numerical data, and examples intact.
+- Do not mention the word "sub-query" or use numbering like "Sub-query 1".
+- At the end, include a "References" section if citations are mentioned.
+- Prioritize comprehensive inclusion of all information over conciseness.
 
-The following are the sub-questions and their answers. Please incorporate each in full:
+The following are the sub-questions and their answers. Please incorporate each in full without any reduction in content or detail:
 """
 
         for sub_q, sub_result in combined_sub_results.items():
@@ -434,12 +443,14 @@ The following are the sub-questions and their answers. Please incorporate each i
         combined_prompt += """
 ---
 Now generate the final report based on the sections above.
+IMPORTANT: Include ALL information from ALL sections without summarization or condensing.
 Ensure the language is formal, objective, and professional.
+Do not omit any details, examples, or explanations from the original responses.
 """
 
         try:
             final_result = gpt4o_llm.invoke([
-                SystemMessage(content="You are a citation-focused research assistant."),
+                SystemMessage(content="You are a citation-focused research assistant. Your primary objective is to include ALL information from ALL sources without summarization or condensing. Comprehensiveness is more important than conciseness."),
                 HumanMessage(content=combined_prompt)
             ]).content
         except Exception as e:
@@ -476,7 +487,6 @@ Ensure the language is formal, objective, and professional.
         streamlit_callback("\nSTEP 5: COMPLETED")
 
     return final_result
-
 
 if analyze_button:
     if not company or not selected_subject:
