@@ -657,6 +657,13 @@ def recursive_query(query, max_subqueries=10, source_config=None, streamlit_call
         max_concurrent_sources
     ))
 
+
+
+#############
+
+
+
+
 if analyze_button:
     if not company or not selected_subject:
         st.error("Please select a company and a research subject.")
@@ -715,9 +722,9 @@ if analyze_button:
 
             except Exception as e:
                 status.update(label="❌ Query Failed", state="error")
-                st.error(f"An error occurred during processing: {e}")
+                st.error(f"An error occurred during processing: {str(e)}")
                 
-                # Show traceback for debugging
+                # Show traceback for debugging - FIXED: Don't use nested expander
+                st.error("Error Details:")
                 import traceback
-                with st.expander("Error Details"):
-                    st.code(traceback.format_exc())
+                st.code(traceback.format_exc())
